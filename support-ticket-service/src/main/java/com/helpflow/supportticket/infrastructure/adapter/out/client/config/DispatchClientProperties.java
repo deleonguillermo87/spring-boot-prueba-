@@ -1,0 +1,38 @@
+package com.helpflow.supportticket.infrastructure.adapter.out.client.config;
+
+import java.time.Duration;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+@ConfigurationProperties(prefix = "helpflow.dispatch")
+public class DispatchClientProperties {
+
+	private String url = "http://localhost:8081";
+	private Duration connectTimeout = Duration.ofSeconds(2);
+	private Duration readTimeout = Duration.ofSeconds(3);
+
+	public String getUrl() {
+		return url;
+	}
+
+	public void setUrl(String url) {
+		this.url = url;
+	}
+
+	public Duration getConnectTimeout() {
+		return connectTimeout;
+	}
+
+	public void setConnectTimeout(Duration connectTimeout) {
+		this.connectTimeout = connectTimeout;
+	}
+
+	public Duration getReadTimeout() {
+		return readTimeout;
+	}
+
+	public void setReadTimeout(Duration readTimeout) {
+		this.readTimeout = readTimeout;
+	}
+}
+

@@ -23,6 +23,10 @@ management:
       exposure:
         include: health,info,metrics,prometheus
 helpflow:
+  dispatch:
+    url: ${DISPATCH_URL:http://localhost:8081}
+    connect-timeout: 2s
+    read-timeout: 3s
   security:
     jwt:
       secret: ${JWT_SECRET:dev-only-change-me-dev-only-change-me-32b}
