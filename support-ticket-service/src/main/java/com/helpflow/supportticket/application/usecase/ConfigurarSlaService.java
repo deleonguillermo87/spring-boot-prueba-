@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.util.Objects;
 import java.util.Map;
 
+import com.helpflow.supportticket.application.dto.Actor;
 import com.helpflow.supportticket.application.dto.ConfigurarSlaCommand;
 import com.helpflow.supportticket.application.port.in.ConfigurarSlaUseCase;
 import com.helpflow.supportticket.application.port.out.SlaConfigPort;
@@ -36,5 +37,14 @@ public class ConfigurarSlaService implements ConfigurarSlaUseCase {
 		Map<Prioridad, Duration> plazos = Map.copyOf(command.plazos());
 		new SlaPolicy(clock, plazos);
 		return slaConfigPort.actualizar(plazos);
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public Map<Prioridad, Duration> obtener(Actor actor) {
+		if (actor == null || actor.rol() != Rol.ROLE_ADMIN) {
+			throw new AccesoNoPermitidoException("Solo un administrador puede consultar los SLA.");
+		}
+		return slaConfigPort.obtener();
 	}
 }
