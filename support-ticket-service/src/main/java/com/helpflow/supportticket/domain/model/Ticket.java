@@ -175,6 +175,27 @@ public class Ticket {
 		historial.add(new HistorialTicket(null, estado, estado, observacion, "SISTEMA", Instant.now(clock)));
 	}
 
+	public void registrarObservacion(String observacion, String autor) {
+		Objects.requireNonNull(observacion, "observacion es obligatoria");
+		Objects.requireNonNull(autor, "autor es obligatorio");
+		historial.add(new HistorialTicket(null, estado, estado, observacion, autor, Instant.now(clock)));
+	}
+
+	public void reasignar(Tecnico tecnico, String observacion, String autor) {
+		Objects.requireNonNull(tecnico, "tecnico es obligatorio");
+		if (estado != EstadoTicket.ASIGNADO && estado != EstadoTicket.EN_PROGRESO) {
+			throw new TransicionInvalidaException("Solo se puede reasignar un ticket activo y asignado.");
+		}
+		if (!tecnico.estaActivo() || !tecnico.puedeAtender(categoria) || !tecnico.tieneCapacidad()) {
+			throw new TecnicoNoDisponibleException(
+					"El técnico " + tecnico.getCodigo() + " no puede atender este ticket.");
+		}
+		Objects.requireNonNull(observacion, "observacion es obligatoria");
+		Objects.requireNonNull(autor, "autor es obligatorio");
+		tecnicoAsignado = tecnico;
+		historial.add(new HistorialTicket(null, estado, estado, observacion, autor, Instant.now(clock)));
+	}
+
 	public boolean estaVencido(Instant ahora) {
 		return !fechaLimiteSla.isAfter(Objects.requireNonNull(ahora, "ahora es obligatorio"));
 	}
