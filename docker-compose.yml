@@ -42,6 +42,7 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Defina ADMIN_PASSWORD en .env}
       ADMIN_DOCUMENTO: ${ADMIN_DOCUMENTO:?Defina ADMIN_DOCUMENTO en .env}
       SPRING_DOCKER_COMPOSE_ENABLED: "false"
+      SPRING_PROFILES_ACTIVE: docker
 
 volumes:
   db-data:
