@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: helpflow
+      POSTGRES_USER: helpflow
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-helpflow_dev}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U helpflow -d helpflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  technician-dispatch-service:
+    build: ./technician-dispatch-service
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  support-ticket-service:
+    build: ./support-ticket-service
+    depends_on:
+      db:
+        condition: service_healthy
+      technician-dispatch-service:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/helpflow
+      DB_USER: helpflow
+      DB_PASSWORD: ${DB_PASSWORD:-helpflow_dev}
+      DISPATCH_URL: http://technician-dispatch-service:8081
+      JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET en el archivo .env}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Defina ADMIN_EMAIL en .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Defina ADMIN_PASSWORD en .env}
+      ADMIN_DOCUMENTO: ${ADMIN_DOCUMENTO:?Defina ADMIN_DOCUMENTO en .env}
+      SPRING_DOCKER_COMPOSE_ENABLED: "false"
+
+volumes:
+  db-data:
