@@ -7,5 +7,18 @@ public record RegistrarUsuarioCommand(
 		String sede,
 		String area,
 		String password,
-		Actor actor) {
+		Actor actor,
+		String rolSolicitado,
+		String codigoTecnico) {
+
+	public RegistrarUsuarioCommand(
+			String documento,
+			String nombre,
+			String correoCorporativo,
+			String sede,
+			String area,
+			String password,
+			Actor actor) {
+		this(documento, nombre, correoCorporativo, sede, area, password, actor, null, null);
+	}
 }

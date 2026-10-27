@@ -6,10 +6,12 @@ import java.util.Objects;
 import com.helpflow.supportticket.application.dto.RegistrarUsuarioCommand;
 import com.helpflow.supportticket.application.port.in.RegistrarUsuarioUseCase;
 import com.helpflow.supportticket.application.port.out.PasswordHasherPort;
+import com.helpflow.supportticket.application.port.out.TecnicoRepositoryPort;
 import com.helpflow.supportticket.application.port.out.UsuarioRepositoryPort;
 import com.helpflow.supportticket.domain.exception.AccesoNoPermitidoException;
 import com.helpflow.supportticket.domain.model.EstadoUsuario;
 import com.helpflow.supportticket.domain.model.Rol;
+import com.helpflow.supportticket.domain.model.Tecnico;
 import com.helpflow.supportticket.domain.model.Usuario;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,10 +24,15 @@ public class RegistrarUsuarioService implements RegistrarUsuarioUseCase {
 
 	private final UsuarioRepositoryPort usuarioRepository;
 	private final PasswordHasherPort passwordHasher;
+	private final TecnicoRepositoryPort tecnicoRepository;
 
-	public RegistrarUsuarioService(UsuarioRepositoryPort usuarioRepository, PasswordHasherPort passwordHasher) {
+	public RegistrarUsuarioService(
+			UsuarioRepositoryPort usuarioRepository,
+			PasswordHasherPort passwordHasher,
+			TecnicoRepositoryPort tecnicoRepository) {
 		this.usuarioRepository = usuarioRepository;
 		this.passwordHasher = passwordHasher;
+		this.tecnicoRepository = tecnicoRepository;
 	}
 
 	@Override
@@ -51,11 +58,40 @@ public class RegistrarUsuarioService implements RegistrarUsuarioUseCase {
 		if (usuarioRepository.existePorCorreo(correo)) {
 			throw new IllegalArgumentException("El correo ya está registrado.");
 		}
+		Tecnico tecnicoParaVincular = null;
+		Rol rol = Rol.ROLE_USUARIO;
+		if ("TECNICO".equalsIgnoreCase(command.rolSolicitado())) {
+			if (command.codigoTecnico() == null || command.codigoTecnico().isBlank()) {
+				throw new IllegalArgumentException("codigoTecnico es obligatorio para el registro de técnico.");
+			}
+			tecnicoParaVincular = tecnicoRepository.buscarPorCodigo(command.codigoTecnico().trim())
+					.orElseThrow(() -> new IllegalArgumentException("El código de técnico no existe."));
+			if (tecnicoParaVincular.getUsuarioId() != null
+					|| !tecnicoParaVincular.getDocumento().equals(command.documento().trim())) {
+				throw new IllegalArgumentException(
+						"El técnico ya está vinculado o el documento no coincide.");
+			}
+			rol = Rol.ROLE_TECNICO;
+		}
 		Usuario usuario = new Usuario(
 				null, command.documento().trim(), command.nombre().trim(), correo,
 				command.sede().trim(), command.area().trim(), EstadoUsuario.ACTIVO,
-				Rol.ROLE_USUARIO, passwordHasher.hash(command.password()));
-		return usuarioRepository.guardar(usuario);
+				rol, passwordHasher.hash(command.password()));
+		Usuario guardado = usuarioRepository.guardar(usuario);
+		if (tecnicoParaVincular != null) {
+			tecnicoRepository.guardar(new Tecnico(
+					tecnicoParaVincular.getId(),
+					guardado.getId(),
+					tecnicoParaVincular.getCodigo(),
+					tecnicoParaVincular.getDocumento(),
+					tecnicoParaVincular.getNombre(),
+					tecnicoParaVincular.getSede(),
+					tecnicoParaVincular.getEspecialidades(),
+					tecnicoParaVincular.getCargaMaxima(),
+					tecnicoParaVincular.getTicketsActivos(),
+					tecnicoParaVincular.getEstado()));
+		}
+		return guardado;
 	}
 
 	private boolean esCorreoCorporativo(String correo) {

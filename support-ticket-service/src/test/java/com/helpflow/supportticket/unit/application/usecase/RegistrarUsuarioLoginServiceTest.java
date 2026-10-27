@@ -14,12 +14,14 @@ import com.helpflow.supportticket.application.dto.RegistrarUsuarioCommand;
 import com.helpflow.supportticket.application.port.out.MetricasPort;
 import com.helpflow.supportticket.application.port.out.PasswordHasherPort;
 import com.helpflow.supportticket.application.port.out.TokenProviderPort;
+import com.helpflow.supportticket.application.port.out.TecnicoRepositoryPort;
 import com.helpflow.supportticket.application.port.out.UsuarioRepositoryPort;
 import com.helpflow.supportticket.application.usecase.LoginService;
 import com.helpflow.supportticket.application.usecase.RegistrarUsuarioService;
 import com.helpflow.supportticket.domain.exception.UsuarioInactivoException;
 import com.helpflow.supportticket.domain.model.EstadoUsuario;
 import com.helpflow.supportticket.domain.model.Usuario;
+import com.helpflow.supportticket.domain.model.Tecnico;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +32,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class RegistrarUsuarioLoginServiceTest {
 
 	@Mock UsuarioRepositoryPort usuarioRepository;
+	@Mock TecnicoRepositoryPort tecnicoRepository;
 	@Mock PasswordHasherPort passwordHasher;
 	@Mock TokenProviderPort tokenProvider;
 	@Mock MetricasPort metricas;
@@ -39,7 +42,7 @@ class RegistrarUsuarioLoginServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		registrarService = new RegistrarUsuarioService(usuarioRepository, passwordHasher);
+		registrarService = new RegistrarUsuarioService(usuarioRepository, passwordHasher, tecnicoRepository);
 		loginService = new LoginService(usuarioRepository, passwordHasher, tokenProvider, metricas);
 	}
 
@@ -80,6 +83,46 @@ class RegistrarUsuarioLoginServiceTest {
 		assertEquals(EstadoUsuario.ACTIVO, result.getEstado());
 		assertEquals("hashed", result.getPasswordHash());
 		verify(passwordHasher).hash("raw-password");
+	}
+
+	@Test
+	void registersAndLinksTechnicianOnlyWhenCodeAndDocumentMatch() {
+		Tecnico tecnico = new Tecnico(
+				14L, "TEC-014", "TEC-DOC-14", "Técnico TEC-014", "CENTRAL",
+				java.util.Set.of(com.helpflow.supportticket.domain.model.Categoria.RED),
+				5, 1, EstadoUsuario.ACTIVO);
+		when(usuarioRepository.existePorDocumento("TEC-DOC-14")).thenReturn(false);
+		when(usuarioRepository.existePorCorreo("new@helpflow.com")).thenReturn(false);
+		when(tecnicoRepository.buscarPorCodigo("TEC-014")).thenReturn(Optional.of(tecnico));
+		when(passwordHasher.hash("raw-password")).thenReturn("hashed");
+		when(usuarioRepository.guardar(any(Usuario.class))).thenAnswer(invocation -> {
+			Usuario value = invocation.getArgument(0);
+			return new Usuario(
+					42L, value.getDocumento(), value.getNombre(), value.getCorreoCorporativo(),
+					value.getSede(), value.getArea(), value.getEstado(), value.getRol(), value.getPasswordHash());
+		});
+
+		Usuario registered = registrarService.ejecutar(new RegistrarUsuarioCommand(
+				"TEC-DOC-14", "Tecnico", "new@helpflow.com", "CENTRAL", "TI",
+				"raw-password", ApplicationTestFixtures.adminActor(), "TECNICO", "TEC-014"));
+
+		assertEquals(com.helpflow.supportticket.domain.model.Rol.ROLE_TECNICO, registered.getRol());
+		verify(tecnicoRepository).guardar(org.mockito.ArgumentMatchers.argThat(linked ->
+				linked.getId().equals(tecnico.getId()) && linked.getUsuarioId().equals(42L)));
+	}
+
+	@Test
+	void doesNotAllowAdminRoleThroughRegistration() {
+		when(usuarioRepository.existePorDocumento("DOC-5")).thenReturn(false);
+		when(usuarioRepository.existePorCorreo("new@helpflow.com")).thenReturn(false);
+		when(passwordHasher.hash("raw-password")).thenReturn("hashed");
+		when(usuarioRepository.guardar(any(Usuario.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+		Usuario registered = registrarService.ejecutar(new RegistrarUsuarioCommand(
+				"DOC-5", "Nuevo Usuario", "new@helpflow.com", "CENTRAL", "TI",
+				"raw-password", ApplicationTestFixtures.adminActor(), "ADMIN", null));
+
+		assertEquals(com.helpflow.supportticket.domain.model.Rol.ROLE_USUARIO, registered.getRol());
 	}
 
 	@Test

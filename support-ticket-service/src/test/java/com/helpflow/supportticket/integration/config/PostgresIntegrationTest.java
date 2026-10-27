@@ -3,10 +3,7 @@ package com.helpflow.supportticket.integration.config;
 import java.time.Clock;
 
 import com.helpflow.supportticket.SupportTicketApplication;
-import com.helpflow.supportticket.application.port.out.MetricasPort;
-import com.helpflow.supportticket.application.port.out.PasswordHasherPort;
 import com.helpflow.supportticket.application.port.out.TechnicianDispatchPort;
-import com.helpflow.supportticket.application.port.out.TokenProviderPort;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -40,19 +37,5 @@ public abstract class PostgresIntegrationTest {
 			return mock(TechnicianDispatchPort.class);
 		}
 
-		@Bean
-		PasswordHasherPort passwordHasherPort() {
-			return mock(PasswordHasherPort.class);
-		}
-
-		@Bean
-		TokenProviderPort tokenProviderPort() {
-			return mock(TokenProviderPort.class);
-		}
-
-		@Bean
-		MetricasPort metricasPort() {
-			return mock(MetricasPort.class);
-		}
 	}
 }
