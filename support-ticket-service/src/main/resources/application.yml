@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: support-ticket-service
+  docker:
+    compose:
+      enabled: false
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/helpflow}
+    username: ${DB_USER:helpflow}
+    password: ${DB_PASSWORD:helpflow}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        default_batch_fetch_size: 50
+  flyway:
+    enabled: true

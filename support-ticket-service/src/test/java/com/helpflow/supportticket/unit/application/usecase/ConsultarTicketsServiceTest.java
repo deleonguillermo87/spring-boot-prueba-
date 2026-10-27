@@ -47,7 +47,7 @@ class ConsultarTicketsServiceTest {
 		FiltroTickets filtros = new FiltroTickets(EstadoTicket.ASIGNADO, null, null);
 		PaginaResultado<Ticket> resultado = resultado(List.of(ticket), 0, 20, 45, 3);
 		when(ticketRepository.buscarPorSolicitante(1L, pagina, filtros)).thenReturn(resultado);
-		when(ticketRepository.buscarPorTecnico(14L, pagina, filtros)).thenReturn(resultado);
+		when(ticketRepository.buscarPorTecnico(114L, pagina, filtros)).thenReturn(resultado);
 		when(ticketRepository.buscarTodos(pagina, filtros)).thenReturn(resultado);
 
 		assertEquals(ticket.getId(), service.ejecutar(new ConsultarTicketsCommand(
@@ -58,7 +58,7 @@ class ConsultarTicketsServiceTest {
 				ApplicationTestFixtures.adminActor(), pagina, filtros)).contenido().getFirst().id());
 
 		verify(ticketRepository).buscarPorSolicitante(1L, pagina, filtros);
-		verify(ticketRepository).buscarPorTecnico(14L, pagina, filtros);
+		verify(ticketRepository).buscarPorTecnico(114L, pagina, filtros);
 		verify(ticketRepository).buscarTodos(pagina, filtros);
 	}
 

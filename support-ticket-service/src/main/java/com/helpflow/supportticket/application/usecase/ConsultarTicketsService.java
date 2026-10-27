@@ -68,7 +68,7 @@ public class ConsultarTicketsService implements ConsultarTicketsUseCase {
 		return switch (actor.rol()) {
 			case ROLE_USUARIO -> Objects.equals(ticket.getSolicitante().getId(), actor.id());
 			case ROLE_TECNICO -> ticket.getTecnicoAsignado() != null
-					&& Objects.equals(ticket.getTecnicoAsignado().getId(), actor.id());
+					&& Objects.equals(ticket.getTecnicoAsignado().getUsuarioId(), actor.id());
 			case ROLE_ADMIN -> true;
 		};
 	}

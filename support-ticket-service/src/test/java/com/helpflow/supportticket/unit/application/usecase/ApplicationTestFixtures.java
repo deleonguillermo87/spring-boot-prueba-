@@ -36,7 +36,7 @@ final class ApplicationTestFixtures {
 	}
 
 	static Actor tecnicoActor() {
-		return new Actor(14L, Rol.ROLE_TECNICO);
+		return new Actor(114L, Rol.ROLE_TECNICO);
 	}
 
 	static Actor adminActor() {
@@ -55,7 +55,7 @@ final class ApplicationTestFixtures {
 
 	static Tecnico tecnico(long id, String codigo, int cargaMaxima, int activos, EstadoUsuario estado) {
 		return new Tecnico(
-				id, codigo, "TEC-DOC-" + id, "Técnico " + codigo, "CENTRAL",
+				id, id + 100, codigo, "TEC-DOC-" + id, "Técnico " + codigo, "CENTRAL",
 				Set.of(Categoria.RED), cargaMaxima, activos, estado);
 	}
 

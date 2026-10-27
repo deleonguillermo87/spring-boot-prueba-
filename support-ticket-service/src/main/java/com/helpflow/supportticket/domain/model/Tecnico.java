@@ -6,6 +6,7 @@ import java.util.Set;
 public class Tecnico {
 
 	private final Long id;
+	private final Long usuarioId;
 	private final String codigo;
 	private final String documento;
 	private final String nombre;
@@ -25,6 +26,20 @@ public class Tecnico {
 			int cargaMaxima,
 			int ticketsActivos,
 			EstadoUsuario estado) {
+		this(id, null, codigo, documento, nombre, sede, especialidades, cargaMaxima, ticketsActivos, estado);
+	}
+
+	public Tecnico(
+			Long id,
+			Long usuarioId,
+			String codigo,
+			String documento,
+			String nombre,
+			String sede,
+			Set<Categoria> especialidades,
+			int cargaMaxima,
+			int ticketsActivos,
+			EstadoUsuario estado) {
 		if (cargaMaxima <= 0) {
 			throw new IllegalArgumentException("cargaMaxima debe ser positiva");
 		}
@@ -32,6 +47,7 @@ public class Tecnico {
 			throw new IllegalArgumentException("ticketsActivos no puede ser negativo");
 		}
 		this.id = id;
+		this.usuarioId = usuarioId;
 		this.codigo = Objects.requireNonNull(codigo, "codigo es obligatorio");
 		this.documento = Objects.requireNonNull(documento, "documento es obligatorio");
 		this.nombre = Objects.requireNonNull(nombre, "nombre es obligatorio");
@@ -44,6 +60,10 @@ public class Tecnico {
 
 	public Long getId() {
 		return id;
+	}
+
+	public Long getUsuarioId() {
+		return usuarioId;
 	}
 
 	public String getCodigo() {

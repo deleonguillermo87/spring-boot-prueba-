@@ -58,7 +58,7 @@ public class GestionarTicketService implements GestionarTicketUseCase {
 		}
 		if (actor.rol() == Rol.ROLE_TECNICO
 				&& ticket.getTecnicoAsignado() != null
-				&& Objects.equals(ticket.getTecnicoAsignado().getId(), actor.id())) {
+				&& Objects.equals(ticket.getTecnicoAsignado().getUsuarioId(), actor.id())) {
 			return;
 		}
 		if (actor.rol() == Rol.ROLE_USUARIO
