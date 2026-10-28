@@ -10,7 +10,6 @@ import com.helpflow.supportticket.domain.model.Disponibilidad;
 import com.helpflow.supportticket.domain.model.Prioridad;
 import com.helpflow.supportticket.infrastructure.adapter.out.client.dto.DispatchClientRequest;
 import com.helpflow.supportticket.infrastructure.adapter.out.client.dto.DispatchClientResponse;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpServerErrorException;
@@ -19,7 +18,6 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 @Component
-@ConditionalOnMissingBean(TechnicianDispatchPort.class)
 public class TechnicianDispatchRestAdapter implements TechnicianDispatchPort {
 
 	private final RestClient restClient;
