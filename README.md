@@ -222,4 +222,4 @@ Capturas en `docs/evidencias/`:
 ## Limitaciones conocidas
 
 - La edición del perfil de usuarios y técnicos no está implementada.
-- *(Actualizar si el scheduler automático de escalamiento SLA no llegó a completarse: hoy el escalamiento se dispara con `POST /admin/tickets/escalar`.)*
+- El escalamiento automático por SLA corre cada 60 segundos (`helpflow.sla.escalation.*`) y también puede dispararse con `POST /admin/tickets/escalar`.
