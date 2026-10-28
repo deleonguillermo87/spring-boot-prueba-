@@ -21,8 +21,8 @@ Prueba de desempeño RIWI Módulo 6. Monorepo con dos microservicios Java 21 + M
 - Si el dispatch falla, el ticket queda ABIERTO sin asignar y se registra en el historial.
 
 ## Estado
-HECHO: dispatch-service, dominio, casos de uso, paginación, persistencia + Testcontainers, seguridad JWT, métricas Micrometer. 65 tests en verde.
-PENDIENTE: controllers REST + @ControllerAdvice + cliente de dispatch + Swagger; scheduler de escalamiento SLA; edición de perfil de usuario/técnico; tests MockMvc con JWT; Dockerfiles y docker-compose; README, diagramas, Postman, capturas.
+HECHO: dispatch-service (con Dockerfile probado), dominio, casos de uso, paginación, persistencia + Testcontainers, seguridad JWT, métricas Micrometer, cliente REST de dispatch, TraceIdFilter, OpenAPI, controllers REST con DTOs y validación, logging estructurado (perfil docker), Dockerfiles, docker-compose y .env.example. 97 tests en verde.
+PENDIENTE (en este orden): GlobalExceptionHandler con ProblemDetail + prueba de humo del contexto; scheduler de escalamiento SLA; edición de perfil de usuario/técnico; tests de integración MockMvc con JWT; README, diagramas, Postman, capturas.
 
 ## Reglas de trabajo
 - Hacer solo lo pedido en cada tarea. Nunca borrar archivos existentes ni recrearlos desde cero.
