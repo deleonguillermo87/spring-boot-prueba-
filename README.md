@@ -219,6 +219,58 @@ Capturas en `docs/evidencias/`:
 └── technician-dispatch-service/
 ```
 
+## Guía de uso: Swagger y Postman
+
+Con la aplicación en marcha (`docker compose up --build`), la API queda en `http://localhost:8080`.
+
+### Swagger UI
+
+1. Abre http://localhost:8080/swagger-ui.html (contrato en http://localhost:8080/v3/api-docs).
+2. Ejecuta `POST /auth/register` con:
+   ```json
+   {"documento":"1001","nombre":"Ana Perez","correoCorporativo":"ana@helpflow.com","sede":"BARRANQUILLA","area":"TI","password":"Ana12345!"}
+   ```
+3. Ejecuta `POST /auth/login` con `{"correoCorporativo":"ana@helpflow.com","password":"Ana12345!"}` y copia el valor de `token`.
+4. Pulsa **Authorize** (candado), pega el token y confirma.
+5. Ejecuta `POST /tickets`:
+   ```json
+   {"titulo":"No hay internet en sala 3","descripcion":"Sin conexion desde la manana","categoria":"RED","prioridad":"ALTA","sede":"BARRANQUILLA","activoAfectado":"Switch piso 3"}
+   ```
+   El ticket queda `ASIGNADO` con un `tecnicoAsignadoCodigo`, porque el servicio consulta a `technician-dispatch-service`.
+6. Consulta `GET /tickets` y `GET /tickets/{id}` para ver el ticket con su historial.
+
+### Postman
+
+1. **Import** → **Link** → `http://localhost:8080/v3/api-docs` → formato *Postman Collection*. También puedes importar `postman/HelpFlow.postman_collection.json`.
+2. En la colección, pestaña **Authorization**: tipo *Bearer Token* con valor `{{token}}`.
+3. En la petición `POST /auth/login`, pestaña **Scripts** (o **Tests**), para guardar el token automáticamente:
+   ```javascript
+   pm.collectionVariables.set("token", pm.response.json().token);
+   ```
+4. Ejecuta en orden: registro, login, crear ticket, listar tickets.
+
+### Resultados esperados
+
+| Petición | Resultado |
+|---|---|
+| `POST /auth/register` | Usuario creado con `rol: ROLE_USUARIO` |
+| `POST /auth/login` | `token` JWT |
+| `POST /tickets` | `estado: ASIGNADO` con técnico asignado |
+| `GET /tickets` sin token | 401 `application/problem+json` con `traceId` |
+| `GET /admin/sla` con usuario normal | 403 `problem+json` |
+| `GET /admin/sla` con el administrador | 200 con los plazos de SLA |
+| `PATCH /tickets/{id}/estado` con transición inválida (por ejemplo `CERRADO` desde `ASIGNADO`) | 409 `problem+json` |
+| `PATCH /tickets/{id}/estado` a `RESUELTO` sin observación | 400 con el detalle de validación |
+
+El **administrador** no se registra por la API: se crea al arrancar con las variables `ADMIN_EMAIL`, `ADMIN_PASSWORD` y `ADMIN_DOCUMENTO` del archivo `.env`. Inicia sesión con esas credenciales para probar `/admin/*`.
+
+Para registrar un **técnico**, usa un código sembrado por Flyway (`TEC-001` a `TEC-050`) con el documento que tiene en la base: `docker compose exec db psql -U helpflow -d helpflow -c "select codigo, documento, nombre, sede from tecnicos limit 5;"`. Envía además `"rol":"ROLE_TECNICO"` y `"codigoTecnico":"TEC-002"` en el registro.
+
+### Métricas
+
+Con el token del administrador:
+`GET /actuator/metrics` lista las métricas y `GET /actuator/prometheus` las expone en formato Prometheus.
+
 ## Limitaciones conocidas
 
 - La edición del perfil de usuarios y técnicos no está implementada.
