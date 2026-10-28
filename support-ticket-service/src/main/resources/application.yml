@@ -31,3 +31,7 @@ helpflow:
     jwt:
       secret: ${JWT_SECRET:dev-only-change-me-dev-only-change-me-32b}
       expiration-minutes: ${JWT_EXPIRATION_MINUTES:60}
+
+logging:
+  pattern:
+    level: "%5p [traceId=%X{traceId:-}]"
