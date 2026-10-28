@@ -24,7 +24,8 @@ final class ProblemResponseWriter {
 		if (traceId == null || traceId.isBlank()) {
 			traceId = UUID.randomUUID().toString();
 		}
-		String body = "{\"type\":\"about:blank\",\"title\":\"" + escape(title)
+		String code = status == 401 ? "autenticacion-requerida" : "acceso-denegado";
+		String body = "{\"type\":\"urn:helpflow:problem:" + code + "\",\"title\":\"" + escape(title)
 				+ "\",\"status\":" + status
 				+ ",\"detail\":\"" + escape(detail)
 				+ "\",\"instance\":\"" + escape(instance)
