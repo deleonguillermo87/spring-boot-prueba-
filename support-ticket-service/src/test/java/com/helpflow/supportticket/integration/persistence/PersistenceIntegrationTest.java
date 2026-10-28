@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.helpflow.supportticket.application.port.out.AsignacionRepositoryPort;
+import com.helpflow.supportticket.application.port.out.TechnicianDispatchPort;
 import com.helpflow.supportticket.application.dto.FiltroTickets;
 import com.helpflow.supportticket.application.dto.PaginaSolicitud;
 import com.helpflow.supportticket.application.port.out.TecnicoRepositoryPort;
@@ -33,9 +34,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 class PersistenceIntegrationTest extends PostgresIntegrationTest {
 
+	@MockitoBean TechnicianDispatchPort dispatch;
 	@Autowired JdbcTemplate jdbc;
 	@Autowired UsuarioRepositoryPort usuarios;
 	@Autowired TecnicoRepositoryPort tecnicos;

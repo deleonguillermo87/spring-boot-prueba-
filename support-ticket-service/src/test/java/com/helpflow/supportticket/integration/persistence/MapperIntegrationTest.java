@@ -19,6 +19,7 @@ import com.helpflow.supportticket.domain.model.Rol;
 import com.helpflow.supportticket.domain.model.Tecnico;
 import com.helpflow.supportticket.domain.model.Ticket;
 import com.helpflow.supportticket.domain.model.Usuario;
+import com.helpflow.supportticket.application.port.out.TechnicianDispatchPort;
 import com.helpflow.supportticket.infrastructure.adapter.out.persistence.entity.AsignacionEntity;
 import com.helpflow.supportticket.infrastructure.adapter.out.persistence.entity.HistorialTicketEntity;
 import com.helpflow.supportticket.infrastructure.adapter.out.persistence.entity.SlaConfigEntity;
@@ -34,9 +35,11 @@ import com.helpflow.supportticket.infrastructure.adapter.out.persistence.mapper.
 import com.helpflow.supportticket.integration.config.PostgresIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 class MapperIntegrationTest extends PostgresIntegrationTest {
 
+	@MockitoBean TechnicianDispatchPort dispatch;
 	private static final Instant NOW = Instant.parse("2026-03-01T10:00:00Z");
 
 	@Autowired UsuarioMapper usuarioMapper;

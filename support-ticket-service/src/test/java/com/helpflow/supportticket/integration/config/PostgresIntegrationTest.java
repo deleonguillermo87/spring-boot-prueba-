@@ -3,7 +3,6 @@ package com.helpflow.supportticket.integration.config;
 import java.time.Clock;
 
 import com.helpflow.supportticket.SupportTicketApplication;
-import com.helpflow.supportticket.application.port.out.TechnicianDispatchPort;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -14,7 +13,6 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import static org.mockito.Mockito.mock;
 
 @Testcontainers
 @SpringBootTest(classes = SupportTicketApplication.class)
@@ -32,11 +30,6 @@ public abstract class PostgresIntegrationTest {
 		@Bean
 		Clock applicationClock() {
 			return Clock.systemUTC();
-		}
-
-		@Bean
-		TechnicianDispatchPort technicianDispatchPort() {
-			return mock(TechnicianDispatchPort.class);
 		}
 
 	}
