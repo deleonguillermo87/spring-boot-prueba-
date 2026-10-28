@@ -1,660 +1,225 @@
-# HelpFlow - Sistema de Gestión de Tickets de Soporte Técnico
+# HelpFlow – Sistema Integral de Gestión de Soporte TI
 
-> **Prueba de Desempeño - Módulo 6 (RIWI)**  
-> Monorepo compuesto por dos microservicios construidos en **Java 21**, **Spring Boot** y bajo los principios estrictos de **Arquitectura Hexagonal (Ports & Adapters)** y **Domain-Driven Design (DDD)**.
+Prueba de desempeño del Módulo 6 (RIWI). Sistema de tickets de soporte para una empresa con equipos en varias sedes: registrar, priorizar, asignar, escalar y cerrar tickets con trazabilidad, seguridad JWT y observabilidad.
 
----
+**Autor:** Guillermo De Leon Rojano
 
-## 📋 Tabla de Contenidos
+## Arquitectura
 
-1. [Descripción General](#-descripción-general)
-2. [Arquitectura del Sistema](#-arquitectura-del-sistema)
-   - [Microservicios](#microservicios)
-   - [Arquitectura Hexagonal (`support-ticket-service`)](#arquitectura-hexagonal-support-ticket-service)
-3. [Stack Tecnológico](#-stack-tecnológico)
-4. [Estructura del Proyecto](#-estructura-del-proyecto)
-5. [Requisitos Previos](#-requisitos-previos)
-6. [Configuración del Entorno (`.env`)](#-configuración-del-entorno-env)
-7. [Puesta en Marcha](#-puesta-en-marcha)
-   - [Opción 1: Despliegue completo con Docker Compose](#opción-1-despliegue-completo-con-docker-compose-recomendado)
-   - [Opción 2: Ejecución local para desarrollo](#opción-2-ejecución-local-para-desarrollo)
-8. [Conexión a Base de Datos (DBeaver / DataGrip)](#-conexión-a-base-de-datos-dbeaver--datagrip)
-9. [Catálogo de Endpoints de la API](#-catálogo-de-endpoints-de-la-api)
-10. [Seguridad y Control de Acceso](#-seguridad-y-control-de-acceso)
-11. [Observabilidad y Trazabilidad](#-observabilidad-y-trazabilidad)
-12. [Ejecución de Pruebas Automatizadas](#-ejecución-de-pruebas-automatizadas)
+Monorepo con dos microservicios en Java 21 y Maven:
 
----
+| Servicio | Spring Boot | Puerto | Descripción |
+|---|---|---|---|
+| `support-ticket-service` | 4.1.2 | 8080 | Servicio central de tickets. Arquitectura hexagonal, JPA/Hibernate, JWT, Flyway, Actuator/Micrometer |
+| `technician-dispatch-service` | 3.5.6 | 8081 | Servicio simulado y liviano (sin JPA ni seguridad) que sugiere un técnico y un tiempo estimado de forma determinista |
 
-## 📌 Descripción General
-
-**HelpFlow** es una solución integral para la gestión y resolución ágil de incidencias técnicas en entornos empresariales. El sistema automatiza:
-
-- El registro y categorización de tickets de soporte técnico por parte de los usuarios.
-- El despacho y sugerencia inteligente de técnicos especializados mediante comunicación síncrona y resiliente entre microservicios.
-- La gestión del ciclo de vida y auditoría del ticket (historial completo de estados y observaciones).
-- La configuración y monitoreo del cumplimiento de los **Acuerdos de Nivel de Servicio (SLA)** con escalamiento preventivo.
-- Métricas operacionales en tiempo real expuestas hacia sistemas de monitoreo como Prometheus.
-
----
-
-## 🏗 Arquitectura del Sistema
-
-### Microservicios
+### Relación entre microservicios
 
 ```mermaid
 flowchart LR
-    subgraph Clientes["Clientes / Frontend"]
-        U["Usuario (ROLE_USUARIO)"]
-        T["Técnico (ROLE_TECNICO)"]
-        A["Administrador (ROLE_ADMIN)"]
-    end
-
-    subgraph HelpFlow["Plataforma HelpFlow"]
-        STS["support-ticket-service\n(Puerto 8080)"]
-        TDS["technician-dispatch-service\n(Puerto 8081)"]
-        DB[("PostgreSQL 16\n(Puerto interno 5432 / Host 5433)")]
-    end
-
-    U -->|REST / JWT| STS
-    T -->|REST / JWT| STS
-    A -->|REST / JWT| STS
-
-    STS -->|HTTP POST RestClient| TDS
-    STS -->|JPA / Flyway| DB
+    U[Cliente / Postman / Swagger] -->|JWT| S[support-ticket-service :8080]
+    S -->|POST /technician-dispatch| D[technician-dispatch-service :8081]
+    S --> DB[(PostgreSQL)]
+    S -.->|/actuator/metrics, /actuator/prometheus| M[Monitoreo]
 ```
 
-1. **`support-ticket-service`** (Spring Boot 4.1.2):  
-   Núcleo transaccional de HelpFlow. Implementa la lógica de tickets, autenticación JWT, configuración de SLA, historial y trazabilidad.
-2. **`technician-dispatch-service`** (Spring Boot 3.5.6):  
-   Microservicio determinista de soporte que analiza la categoría, prioridad y carga laboral para sugerir la asignación óptima de técnicos.
-3. **`PostgreSQL 16`**:  
-   Base de datos relacional con control de versiones de esquema automatizado mediante **Flyway** (V1 Schema, V2 Asignaciones/Historial/SLA, V3 Datos Iniciales de 50 técnicos).
+Si el dispatch-service no responde (timeout o error 5xx), el ticket se crea igualmente en estado `ABIERTO` sin asignar y queda registrada la observación en su historial.
 
----
-
-### Arquitectura Hexagonal (`support-ticket-service`)
-
-El servicio principal se estructura respetando rigurosamente las fronteras de aislamiento arquitectónico:
-
-```
-src/main/java/com/helpflow/supportticket/
-├── domain/                  # NÚCLEO: Java puro. Cero frameworks.
-│   ├── model/               # Entidades de dominio (Ticket, Usuario, Tecnico, etc.)
-│   ├── service/             # Políticas de negocio (AsignacionPolicy, SlaPolicy, Transiciones)
-│   └── exception/           # Excepciones de reglas de negocio
-│
-├── application/             # APLICACIÓN: Orquestación y casos de uso.
-│   ├── port/in/             # Puertos de entrada (interfaces de casos de uso)
-│   ├── port/out/            # Puertos de salida (interfaces de persistencia, clientes, métricas)
-│   ├── dto/                 # Comandos y DTOs agnósticos
-│   └── usecase/             # Servicios de aplicación (@Service, @Transactional)
-│
-└── infrastructure/          # INFRAESTRUCTURA: Adaptadores tecnológicos.
-    ├── adapter/in/rest/     # Controllers REST, DTOs con validación cruzada y Mappers
-    ├── adapter/out/client/  # Adaptador HTTP RestClient hacia technician-dispatch-service
-    ├── adapter/out/persistence/ # Entidades JPA, Repositorios Spring Data y Mappers
-    ├── security/            # Spring Security 7, JWT HS256 (Nimbus), ActorResolver
-    ├── observability/       # TraceIdFilter (MDC) y MicrometerMetricasAdapter
-    └── config/              # OpenApiConfig (Swagger UI) y configuración de clientes
-```
-
-> **Reglas Hexagonales Clave:**
-> - `domain`: Nunca importa Spring, Jakarta, Jackson, Lombok ni MapStruct.
-> - `application`: Solo utiliza `@Service` y `@Transactional`. Prohibido importar `web`, `security`, `data` o `persistence`.
-> - **Paginación desacoplada**: Utiliza DTOs propios (`PaginaSolicitud`, `PaginaResultado`, `PaginaResponse`). Nunca se expone `Page` de Spring fuera del adaptador JPA.
-
----
-
-## 🛠 Stack Tecnológico
-
-- **Lenguaje:** Java 21 (LTS)
-- **Frameworks:** Spring Boot 4.1.2 & Spring Boot 3.5.6
-- **Persistencia:** Spring Data JPA, Hibernate 7, Flyway Migration
-- **Base de Datos:** PostgreSQL 16
-- **Seguridad:** Spring Security 7, OAuth2 Resource Server con Nimbus JWT (HS256)
-- **Cliente HTTP:** Spring RestClient (Timeouts de 2s conexión y 3s lectura)
-- **Mapeo:** MapStruct 1.6.3
-- **Documentación API:** SpringDoc OpenAPI 3.2.0 (Swagger UI)
-- **Métricas & Trazabilidad:** Micrometer Prometheus, MDC (Mapped Diagnostic Context)
-- **Contenedores:** Docker, Docker Compose
-- **Pruebas:** JUnit 5, Mockito, Testcontainers (PostgreSQL), MockRestServiceServer, MockMvc
-
----
-
-## 📁 Estructura del Monorepo
-
-```text
-├── docker-compose.yml              # Orquestación de contenedores (db, dispatch, support)
-├── .env.example                    # Plantilla de variables de entorno requeridas
-├── mvnw / mvnw.cmd                 # Maven Wrapper unificado
-├── docs/                           # Documentación de contexto y diagramas
-├── technician-dispatch-service/    # Microservicio de despacho de técnicos
-└── support-ticket-service/         # Microservicio principal de tickets
-    ├── pom.xml
-    └── src/
-        ├── main/
-        │   ├── java/com/helpflow/supportticket/...
-        │   └── resources/
-        │       ├── application.yml
-        │       └── db/migration/   # Scripts Flyway V1, V2, V3
-        └── test/                   # Suite de pruebas unitarias y de integración
-```
-
----
-
-## ⚙️ Requisitos Previos
-
-- **JDK 21** instalado y configurado en el `JAVA_HOME`.
-- **Docker** y **Docker Compose** en ejecución.
-- Git.
-
----
-
-## 🔐 Configuración del Entorno (`.env`)
-
-Crea un archivo `.env` en la raíz del proyecto copiando la plantilla:
-
-```bash
-cp .env.example .env
-```
-
-Configura tus variables en `.env`:
-
-```properties
-# Base de datos
-DB_PASSWORD=helpflow123
-
-# Secreto JWT (mínimo 32 caracteres / 256 bits)
-JWT_SECRET=tu-clave-secreta-de-al-menos-32-caracteres-helpflow-2026
-
-# Administrador inicial creado en el arranque
-ADMIN_EMAIL=admin@helpflow.com
-ADMIN_PASSWORD=admin123
-ADMIN_DOCUMENTO=1000000000
-```
-
----
-
-## 🚀 Puesta en Marcha
-
-### Opción 1: Despliegue completo con Docker Compose (Recomendado)
-
-Construye las imágenes y levanta todos los servicios:
-
-```bash
-docker compose up --build -d
-```
-
-Verifica el estado de los contenedores:
-
-```bash
-docker compose ps
-```
-
-| Servicio | URL / Puerto | Descripción |
-| :--- | :--- | :--- |
-| **`support-ticket-service`** | `http://localhost:8080` | API principal de tickets |
-| **`Swagger UI`** | `http://localhost:8080/swagger-ui.html` | Documentación interactiva OpenAPI |
-| **`technician-dispatch-service`**| `http://localhost:8081` | Microservicio de despacho |
-| **`PostgreSQL`** | `localhost:5433` | Base de datos relacional expuesta al host |
-
-Para detener el ecosistema:
-
-```bash
-docker compose down
-```
-
----
-
-### Opción 2: Ejecución local para desarrollo
-
-1. **Levantar únicamente la base de datos en Docker:**
-   ```bash
-   docker compose up -d db
-   ```
-
-2. **Ejecutar `technician-dispatch-service`:**
-   ```bash
-   ./mvnw -f technician-dispatch-service/pom.xml spring-boot:run
-   ```
-
-3. **Ejecutar `support-ticket-service`:**
-   ```bash
-   DB_URL=jdbc:postgresql://localhost:5433/helpflow \
-   DB_USER=helpflow \
-   DB_PASSWORD=helpflow123 \
-   JWT_SECRET=tu-clave-secreta-de-al-menos-32-caracteres-helpflow-2026 \
-   ADMIN_EMAIL=admin@helpflow.com \
-   ADMIN_PASSWORD=admin123 \
-   ADMIN_DOCUMENTO=1000000000 \
-   ./mvnw -f support-ticket-service/pom.xml spring-boot:run
-   ```
-
----
-
-## 🗄 Conexión a Base de Datos (DBeaver / DataGrip)
-
-Para conectarte a la base de datos de desarrollo mediante DBeaver, usa los siguientes parámetros:
-
-- **Manejador:** `PostgreSQL`
-- **Host:** `localhost`
-- **Puerto:** `5433` *(mapeado hacia el 5432 interno del contenedor)*
-- **Database:** `helpflow`
-- **Username:** `helpflow`
-- **Password:** `helpflow123` *(o el valor fijado en `DB_PASSWORD` en `.env`)*
-- **URL JDBC:** `jdbc:postgresql://localhost:5433/helpflow`
-
----
-
-## 📡 Catálogo de Endpoints de la API
-
-### 1. Autenticación (`/auth`)
-
-| Método | Endpoint | Acceso | Descripción |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/auth/register` | Público | Registra un nuevo usuario o técnico (`ROLE_USUARIO`, `ROLE_TECNICO`) |
-| `POST` | `/auth/login` | Público | Inicia sesión y retorna token JWT con 60 min de validez |
-
-### 2. Gestión de Tickets (`/tickets`)
-
-| Método | Endpoint | Rol Requerido | Descripción |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/tickets` | `ROLE_USUARIO` | Crea un ticket de soporte. Despacha técnico automáticamente y retorna `201 Created` con encabezado `Location`. |
-| `GET` | `/tickets` | `USUARIO`, `TECNICO`, `ADMIN` | Consulta paginada con filtros (`?page=0&size=10&sort=fechaCreacion&dir=desc&estado=&categoria=&prioridad=`). Cada rol visualiza lo que le compete. |
-| `GET` | `/tickets/{id}` | `USUARIO`, `TECNICO`, `ADMIN` | Consulta detallada del ticket con validación de pertenencia. |
-| `PATCH`| `/tickets/{id}/estado` | `USUARIO`, `TECNICO`, `ADMIN` | Transiciona de estado. **Validación cruzada:** La `observacion` es obligatoria si el estado destino es `RESUELTO` o `CANCELADO`. |
-| `POST` | `/tickets/{id}/observaciones`| `USUARIO`, `TECNICO`, `ADMIN` | Agrega una observación al historial del ticket (solo permitido si el ticket no está cerrado/cancelado). |
-| `PUT`  | `/tickets/{id}/asignacion` | `ROLE_ADMIN` | Asignación o reasignación manual de técnico. |
-
-### 3. Operaciones Administrativas (`/admin`)
-
-| Método | Endpoint | Rol Requerido | Descripción |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/admin/tickets/escalar` | `ROLE_ADMIN` | Ejecuta el proceso de escalamiento de tickets próximos a vencer según SLA. |
-| `GET`  | `/admin/sla` | `ROLE_ADMIN` | Consulta la configuración actual de plazos SLA en horas. |
-| `PUT`  | `/admin/sla` | `ROLE_ADMIN` | Actualiza la matriz de plazos SLA por prioridad (`CRITICA`, `ALTA`, `MEDIA`, `BAJA`). |
-
-### 4. Monitoreo y Diagnóstico (`/actuator`)
-
-| Método | Endpoint | Acceso | Descripción |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/actuator/health` | Público | Estado de salud de la aplicación |
-| `GET` | `/actuator/info` | Público | Información de compilación y versión |
-| `GET` | `/actuator/prometheus` | `ROLE_ADMIN` | Métricas de Micrometer en formato Prometheus |
-
----
-
-## 🔒 Seguridad y Control de Acceso
-
-1. **Tokens JWT Stateless**:
-   - Firmados con algoritmo **HS256** mediante Nimbus Jose JWT.
-   - Duración: 60 minutos.
-   - Contienen `sub` (ID numérico del usuario), `rol` (`ROLE_USUARIO`, `ROLE_TECNICO`, `ROLE_ADMIN`) y `correo`.
-2. **Autorización por Actor**:
-   - En cada petición, `ActorResolver` extrae la identidad del `Jwt` y construye el objeto de valor de dominio `Actor`.
-   - La lógica de acceso fino (ej. un usuario solo puede ver sus propios tickets o cancelar tickets abiertos) es evaluada en los casos de uso, no en la capa web.
-3. **Primer Administrador**:
-   - `AdminBootstrap` crea el primer usuario con rol `ROLE_ADMIN` en el arranque a partir de `ADMIN_EMAIL`, `ADMIN_PASSWORD` y `ADMIN_DOCUMENTO`.
-
----
-
-## 🔍 Observabilidad y Trazabilidad
-
-- **`TraceIdFilter`**:
-  - Filtro servlet con prioridad máxima (`Ordered.HIGHEST_PRECEDENCE`).
-  - Extrae el identificador del header `X-Trace-Id` o genera un UUID versión 4.
-  - Almacena el `traceId` en el **MDC** de SLF4J, permitiendo logs contextualizados.
-  - Añade la cabecera `X-Trace-Id` en la respuesta HTTP y limpia el MDC al finalizar la petición.
-- **Formato RFC 7807 (`ProblemDetail`)**:
-  - Todas las respuestas de error siguen el estándar RFC 7807 incluyendo `type`, `title`, `status`, `detail`, `instance`, `timestamp` y el `traceId` correlacionado.
-
----
-
-## 🧪 Ejecución de Pruebas Automatizadas
-
-La suite de pruebas incluye tests unitarios de dominio y casos de uso, tests de validación cruzada, tests de adaptadores REST con `MockRestServiceServer` y tests de integración con base de datos real mediante **Testcontainers**:
-
-```bash
-# Ejecutar todas las pruebas del microservicio principal
-./mvnw -f support-ticket-service/pom.xml test
-```
-
-Verificación de la pureza de las capas internas:
-
-```bash
-# Comprobar que domain y application no tienen dependencias web/http de Spring
-grep -rn "org\.springframework\.web" support-ticket-service/src/main/java/com/helpflow/supportticket/domain support-ticket-service/src/main/java/com/helpflow/supportticket/application
-grep -rn "org\.springframework\.http" support-ticket-service/src/main/java/com/helpflow/supportticket/domain support-ticket-service/src/main/java/com/helpflow/supportticket/application
-```
-*(Ambos comandos deben finalizar sin ninguna coincidencia)*.
-
-> **Prueba de Desempeño - Módulo 6 (RIWI)**  
-> Monorepo compuesto por dos microservicios construidos en **Java 21**, **Spring Boot** y bajo los principios estrictos de **Arquitectura Hexagonal (Ports & Adapters)** y **Domain-Driven Design (DDD)**.
-
----
-
-## 📋 Tabla de Contenidos
-
-1. [Descripción General](#-descripción-general)
-2. [Arquitectura del Sistema](#-arquitectura-del-sistema)
-   - [Microservicios](#microservicios)
-   - [Arquitectura Hexagonal (`support-ticket-service`)](#arquitectura-hexagonal-support-ticket-service)
-3. [Stack Tecnológico](#-stack-tecnológico)
-4. [Estructura del Proyecto](#-estructura-del-proyecto)
-5. [Requisitos Previos](#-requisitos-previos)
-6. [Configuración del Entorno (`.env`)](#-configuración-del-entorno-env)
-7. [Puesta en Marcha](#-puesta-en-marcha)
-   - [Opción 1: Despliegue completo con Docker Compose](#opción-1-despliegue-completo-con-docker-compose-recomendado)
-   - [Opción 2: Ejecución local para desarrollo](#opción-2-ejecución-local-para-desarrollo)
-8. [Conexión a Base de Datos (DBeaver / DataGrip)](#-conexión-a-base-de-datos-dbeaver--datagrip)
-9. [Catálogo de Endpoints de la API](#-catálogo-de-endpoints-de-la-api)
-10. [Seguridad y Control de Acceso](#-seguridad-y-control-de-acceso)
-11. [Observabilidad y Trazabilidad](#-observabilidad-y-trazabilidad)
-12. [Ejecución de Pruebas Automatizadas](#-ejecución-de-pruebas-automatizadas)
-
----
-
-## 📌 Descripción General
-
-**HelpFlow** es una solución integral para la gestión y resolución ágil de incidencias técnicas en entornos empresariales. El sistema automatiza:
-
-- El registro y categorización de tickets de soporte técnico por parte de los usuarios.
-- El despacho y sugerencia inteligente de técnicos especializados mediante comunicación síncrona y resiliente entre microservicios.
-- La gestión del ciclo de vida y auditoría del ticket (historial completo de estados y observaciones).
-- La configuración y monitoreo del cumplimiento de los **Acuerdos de Nivel de Servicio (SLA)** con escalamiento preventivo.
-- Métricas operacionales en tiempo real expuestas hacia sistemas de monitoreo como Prometheus.
-
----
-
-## 🏗 Arquitectura del Sistema
-
-### Microservicios
+### Arquitectura hexagonal de `support-ticket-service`
 
 ```mermaid
-flowchart LR
-    subgraph Clientes["Clientes / Frontend"]
-        U["Usuario (ROLE_USUARIO)"]
-        T["Técnico (ROLE_TECNICO)"]
-        A["Administrador (ROLE_ADMIN)"]
+flowchart TB
+    subgraph IN[Adaptadores de entrada]
+        REST[Controllers REST + ControllerAdvice]
+        SCH[Scheduler SLA]
     end
-
-    subgraph HelpFlow["Plataforma HelpFlow"]
-        STS["support-ticket-service\n(Puerto 8080)"]
-        TDS["technician-dispatch-service\n(Puerto 8081)"]
-        DB[("PostgreSQL 16\n(Puerto interno 5432 / Host 5433)")]
+    subgraph APP[Application]
+        PIN[Puertos de entrada: casos de uso]
+        UC[Casos de uso]
+        POUT[Puertos de salida]
     end
-
-    U -->|REST / JWT| STS
-    T -->|REST / JWT| STS
-    A -->|REST / JWT| STS
-
-    STS -->|HTTP POST RestClient| TDS
-    STS -->|JPA / Flyway| DB
+    subgraph DOM[Domain - Java puro]
+        MOD[Ticket, Usuario, Tecnico, Historial, Asignacion]
+        POL[SlaPolicy, TransicionEstadoPolicy, AsignacionPolicy]
+    end
+    subgraph OUT[Adaptadores de salida]
+        JPA[Persistencia JPA + Flyway + MapStruct]
+        CLI[Cliente REST de dispatch]
+        SEC[JWT + BCrypt]
+        MET[Micrometer]
+    end
+    REST --> PIN
+    SCH --> PIN
+    PIN --> UC
+    UC --> MOD
+    UC --> POL
+    UC --> POUT
+    POUT --> JPA
+    POUT --> CLI
+    POUT --> SEC
+    POUT --> MET
 ```
 
-1. **`support-ticket-service`** (Spring Boot 4.1.2):  
-   Núcleo transaccional de HelpFlow. Implementa la lógica de tickets, autenticación JWT, configuración de SLA, historial y trazabilidad.
-2. **`technician-dispatch-service`** (Spring Boot 3.5.6):  
-   Microservicio determinista de soporte que analiza la categoría, prioridad y carga laboral para sugerir la asignación óptima de técnicos.
-3. **`PostgreSQL 16`**:  
-   Base de datos relacional con control de versiones de esquema automatizado mediante **Flyway** (V1 Schema, V2 Asignaciones/Historial/SLA, V3 Datos Iniciales de 50 técnicos).
+Reglas aplicadas y verificadas con pruebas y `grep`:
 
----
+- `domain` es Java puro: sin Spring, Jakarta, Jackson, Lombok ni MapStruct.
+- `application` solo usa `@Service` y `@Transactional` de Spring; no importa web, security, data, JPA ni Micrometer.
+- La paginación usa tipos propios (`PaginaSolicitud`, `PaginaResultado`, `FiltroTickets`); `Page` de Spring solo existe en el adaptador JPA.
 
-### Arquitectura Hexagonal (`support-ticket-service`)
+### Ciclo de vida del ticket
 
-El servicio principal se estructura respetando rigurosamente las fronteras de aislamiento arquitectónico:
-
-```
-src/main/java/com/helpflow/supportticket/
-├── domain/                  # NÚCLEO: Java puro. Cero frameworks.
-│   ├── model/               # Entidades de dominio (Ticket, Usuario, Tecnico, etc.)
-│   ├── service/             # Políticas de negocio (AsignacionPolicy, SlaPolicy, Transiciones)
-│   └── exception/           # Excepciones de reglas de negocio
-│
-├── application/             # APLICACIÓN: Orquestación y casos de uso.
-│   ├── port/in/             # Puertos de entrada (interfaces de casos de uso)
-│   ├── port/out/            # Puertos de salida (interfaces de persistencia, clientes, métricas)
-│   ├── dto/                 # Comandos y DTOs agnósticos
-│   └── usecase/             # Servicios de aplicación (@Service, @Transactional)
-│
-└── infrastructure/          # INFRAESTRUCTURA: Adaptadores tecnológicos.
-    ├── adapter/in/rest/     # Controllers REST, DTOs con validación cruzada y Mappers
-    ├── adapter/out/client/  # Adaptador HTTP RestClient hacia technician-dispatch-service
-    ├── adapter/out/persistence/ # Entidades JPA, Repositorios Spring Data y Mappers
-    ├── security/            # Spring Security 7, JWT HS256 (Nimbus), ActorResolver
-    ├── observability/       # TraceIdFilter (MDC) y MicrometerMetricasAdapter
-    └── config/              # OpenApiConfig (Swagger UI) y configuración de clientes
+```mermaid
+stateDiagram-v2
+    [*] --> ABIERTO
+    ABIERTO --> ASIGNADO
+    ABIERTO --> CANCELADO
+    ASIGNADO --> EN_PROGRESO
+    ASIGNADO --> CANCELADO
+    EN_PROGRESO --> RESUELTO
+    EN_PROGRESO --> CANCELADO
+    RESUELTO --> CERRADO
+    RESUELTO --> EN_PROGRESO: reapertura
+    CERRADO --> [*]
+    CANCELADO --> [*]
 ```
 
-> **Reglas Hexagonales Clave:**
-> - `domain`: Nunca importa Spring, Jakarta, Jackson, Lombok ni MapStruct.
-> - `application`: Solo utiliza `@Service` y `@Transactional`. Prohibido importar `web`, `security`, `data` o `persistence`.
-> - **Paginación desacoplada**: Utiliza DTOs propios (`PaginaSolicitud`, `PaginaResultado`, `PaginaResponse`). Nunca se expone `Page` de Spring fuera del adaptador JPA.
+`RESUELTO` y `CANCELADO` exigen una observación. `CERRADO` y `CANCELADO` son estados finales.
 
----
+## Flujo de asignación
 
-## 🛠 Stack Tecnológico
+1. El usuario registra un ticket en estado `ABIERTO`.
+2. El sistema calcula la fecha límite de SLA según la prioridad.
+3. Consulta a `technician-dispatch-service` por un técnico sugerido, su disponibilidad y el tiempo estimado.
+4. Aplica las reglas internas de asignación: técnico activo, compatibilidad entre categoría y especialidad, carga máxima de tickets activos, preferencia por la misma sede, y prioridad para tickets críticos o próximos a vencer. Si el técnico sugerido no cumple, elige el mejor alternativo.
+5. Genera la asignación y registra el historial. **Todo ocurre en una sola transacción** (`@Transactional`); si algo falla, se revierte el ticket, la asignación y el historial.
 
-- **Lenguaje:** Java 21 (LTS)
-- **Frameworks:** Spring Boot 4.1.2 & Spring Boot 3.5.6
-- **Persistencia:** Spring Data JPA, Hibernate 7, Flyway Migration
-- **Base de Datos:** PostgreSQL 16
-- **Seguridad:** Spring Security 7, OAuth2 Resource Server con Nimbus JWT (HS256)
-- **Cliente HTTP:** Spring RestClient (Timeouts de 2s conexión y 3s lectura)
-- **Mapeo:** MapStruct 1.6.3
-- **Documentación API:** SpringDoc OpenAPI 3.2.0 (Swagger UI)
-- **Métricas & Trazabilidad:** Micrometer Prometheus, MDC (Mapped Diagnostic Context)
-- **Contenedores:** Docker, Docker Compose
-- **Pruebas:** JUnit 5, Mockito, Testcontainers (PostgreSQL), MockRestServiceServer, MockMvc
+### Reglas de SLA
 
----
+| Prioridad | Plazo de atención |
+|---|---|
+| CRITICA | 4 horas |
+| ALTA | 8 horas |
+| MEDIA | 24 horas |
+| BAJA | 72 horas |
 
-## 📁 Estructura del Monorepo
+Los plazos son configurables por el administrador (`/admin/sla`). Los tickets activos próximos a incumplir el SLA se escalan: suben un nivel de prioridad y se registra el historial.
+
+## Roles y seguridad
+
+- Autenticación stateless con **JWT** (HS256), contraseñas con **BCrypt** (`PasswordEncoder`).
+- `ROLE_USUARIO`: crea y consulta únicamente sus tickets.
+- `ROLE_TECNICO`: consulta y gestiona los tickets que tiene asignados. Se registra indicando un código de técnico existente cuyo documento coincida.
+- `ROLE_ADMIN`: acceso completo, reasignación y configuración de SLA. No se puede registrar por la API: se crea al arrancar solo si están definidas `ADMIN_EMAIL`, `ADMIN_PASSWORD` y `ADMIN_DOCUMENTO`.
+- Los errores 401 y 403 se devuelven como `application/problem+json` y alimentan las métricas.
+
+## Endpoints
+
+### support-ticket-service (`:8080`)
+
+| Método | Ruta | Rol | Descripción |
+|---|---|---|---|
+| POST | `/auth/register` | público | Registro de usuario o técnico |
+| POST | `/auth/login` | público | Devuelve el JWT |
+| POST | `/tickets` | USUARIO | Crea un ticket (201 con `Location`) |
+| GET | `/tickets` | autenticado | Lista paginada con `page`, `size`, `sort`, `dir`, `estado`, `categoria`, `prioridad`; cada rol ve lo suyo |
+| GET | `/tickets/{id}` | autenticado | Detalle con historial |
+| PATCH | `/tickets/{id}/estado` | USUARIO (cancelar el propio), TECNICO asignado, ADMIN | Transición de estado con observación |
+| POST | `/tickets/{id}/observaciones` | solicitante, TECNICO asignado, ADMIN | Registra una observación sin cambiar el estado |
+| PUT | `/tickets/{id}/asignacion` | ADMIN | Reasigna a otro técnico |
+| POST | `/admin/tickets/escalar` | ADMIN | Dispara el escalamiento y devuelve cuántos tickets escaló |
+| GET / PUT | `/admin/sla` | ADMIN | Consulta y configura los plazos de SLA |
+| GET | `/actuator/health`, `/actuator/info` | público | Salud e información |
+| GET | `/actuator/metrics`, `/actuator/prometheus` | ADMIN | Métricas |
+| GET | `/swagger-ui.html` | público | Documentación Swagger / OpenAPI |
+
+### technician-dispatch-service (`:8081`)
+
+`POST /technician-dispatch`
+
+```json
+{ "ticketId": 125, "categoria": "RED", "prioridad": "ALTA" }
+```
+
+Respuesta (determinista: la misma combinación siempre devuelve lo mismo):
+
+```json
+{ "ticketId": 125, "tecnicoId": "TEC-002", "disponibilidad": "BAJA", "tiempoEstimadoHoras": 11 }
+```
+
+Disponibilidad: 0–2 h → `ALTA`, 3–8 h → `MEDIA`, más de 8 h → `BAJA`.
+
+## Errores estándar (RFC 7807)
+
+Todas las respuestas de error usan `ProblemDetail` con `type`, `title`, `status`, `detail`, `instance`, `timestamp` y `traceId`. El `traceId` se toma del header `X-Trace-Id` si llega, o se genera, y aparece también en los logs.
+
+## Persistencia
+
+- JPA + Hibernate con relaciones Usuario 1–N Tickets, Ticket 1–N Historial y Ticket N–1 Técnico asignado, todas en `LAZY`.
+- Anti N+1: `@EntityGraph` para las relaciones a uno, `default_batch_fetch_size` para colecciones, y sin `join fetch` de colecciones junto con paginación.
+- Flyway: `V1__schema`, `V2__asignaciones_historial_sla`, `V3__datos_iniciales` (técnicos TEC-001 a TEC-050). `ddl-auto: validate` y `open-in-view: false`.
+
+## Observabilidad
+
+- Actuator expone `health`, `info`, `metrics` y `prometheus`.
+- Métricas de negocio con Micrometer: tickets creados por categoría y prioridad, tickets vencidos según SLA, tiempo de primera respuesta y de resolución, fallas de autenticación y accesos denegados. Consúltalas en `/actuator/metrics`.
+- Logging estructurado en JSON (formato ECS) con el perfil `docker`; en local, texto con `traceId`.
+
+## Cómo ejecutar
+
+### Con Docker Compose
+
+```bash
+cp .env.example .env      # edita los valores (JWT_SECRET de al menos 32 caracteres)
+docker compose up --build
+```
+
+Servicios: `support-ticket-service` en http://localhost:8080, `technician-dispatch-service` en http://localhost:8081 y PostgreSQL en el puerto 5433 del host. Swagger: http://localhost:8080/swagger-ui.html
+
+### En local (sin Docker para las apps)
+
+```bash
+docker compose up -d db
+./mvnw -f technician-dispatch-service/pom.xml spring-boot:run
+DB_URL=jdbc:postgresql://localhost:5433/helpflow DB_USER=helpflow DB_PASSWORD=helpflow_dev \
+JWT_SECRET=un-secreto-de-desarrollo-de-al-menos-32-caracteres \
+./mvnw -f support-ticket-service/pom.xml spring-boot:run
+```
+
+### Pruebas
+
+```bash
+./mvnw -f technician-dispatch-service/pom.xml test
+./mvnw -f support-ticket-service/pom.xml test     # requiere Docker (Testcontainers)
+```
+
+Pruebas unitarias (JUnit + Mockito, con `TechnicianDispatchPort` mockeado), de integración (Spring Boot Test + MockMvc) y de persistencia con **Testcontainers** sobre PostgreSQL real.
+
+## Evidencias
+
+Capturas en `docs/evidencias/`:
+
+- [ ] Resultado de los tests (`BUILD SUCCESS`)
+- [ ] `docker compose up` con los tres servicios arriba
+- [ ] Swagger UI
+- [ ] Registro, login y creación de un ticket asignado
+- [ ] Error `ProblemDetail` con `traceId`
+- [ ] `/actuator/metrics` y `/actuator/prometheus` con métricas de negocio
+- [ ] Tickets vencidos / escalados por SLA
+- [ ] Logs estructurados
+
+## Estructura del repositorio
 
 ```text
-├── docker-compose.yml              # Orquestación de contenedores (db, dispatch, support)
-├── .env.example                    # Plantilla de variables de entorno requeridas
-├── mvnw / mvnw.cmd                 # Maven Wrapper unificado
-├── docs/                           # Documentación de contexto y diagramas
-├── technician-dispatch-service/    # Microservicio de despacho de técnicos
-└── support-ticket-service/         # Microservicio principal de tickets
-    ├── pom.xml
-    └── src/
-        ├── main/
-        │   ├── java/com/helpflow/supportticket/...
-        │   └── resources/
-        │       ├── application.yml
-        │       └── db/migration/   # Scripts Flyway V1, V2, V3
-        └── test/                   # Suite de pruebas unitarias y de integración
+.
+├── docker-compose.yml
+├── .env.example
+├── docs/                      # contexto, diagramas y evidencias
+├── postman/                   # colección de pruebas
+├── support-ticket-service/    # domain · application · infrastructure
+└── technician-dispatch-service/
 ```
 
----
+## Limitaciones conocidas
 
-## ⚙️ Requisitos Previos
-
-- **JDK 21** instalado y configurado en el `JAVA_HOME`.
-- **Docker** y **Docker Compose** en ejecución.
-- Git.
-
----
-
-## 🔐 Configuración del Entorno (`.env`)
-
-Crea un archivo `.env` en la raíz del proyecto copiando la plantilla:
-
-```bash
-cp .env.example .env
-```
-
-Configura tus variables en `.env`:
-
-```properties
-# Base de datos
-DB_PASSWORD=helpflow123
-
-# Secreto JWT (mínimo 32 caracteres / 256 bits)
-JWT_SECRET=tu-clave-secreta-de-al-menos-32-caracteres-helpflow-2026
-
-# Administrador inicial creado en el arranque
-ADMIN_EMAIL=admin@helpflow.com
-ADMIN_PASSWORD=admin123
-ADMIN_DOCUMENTO=1000000000
-```
-
----
-
-## 🚀 Puesta en Marcha
-
-### Opción 1: Despliegue completo con Docker Compose (Recomendado)
-
-Construye las imágenes y levanta todos los servicios:
-
-```bash
-docker compose up --build -d
-```
-
-Verifica el estado de los contenedores:
-
-```bash
-docker compose ps
-```
-
-| Servicio | URL / Puerto | Descripción |
-| :--- | :--- | :--- |
-| **`support-ticket-service`** | `http://localhost:8080` | API principal de tickets |
-| **`Swagger UI`** | `http://localhost:8080/swagger-ui.html` | Documentación interactiva OpenAPI |
-| **`technician-dispatch-service`**| `http://localhost:8081` | Microservicio de despacho |
-| **`PostgreSQL`** | `localhost:5433` | Base de datos relacional expuesta al host |
-
-Para detener el ecosistema:
-
-```bash
-docker compose down
-```
-
----
-
-### Opción 2: Ejecución local para desarrollo
-
-1. **Levantar únicamente la base de datos en Docker:**
-   ```bash
-   docker compose up -d db
-   ```
-
-2. **Ejecutar `technician-dispatch-service`:**
-   ```bash
-   ./mvnw -f technician-dispatch-service/pom.xml spring-boot:run
-   ```
-
-3. **Ejecutar `support-ticket-service`:**
-   ```bash
-   DB_URL=jdbc:postgresql://localhost:5433/helpflow \
-   DB_USER=helpflow \
-   DB_PASSWORD=helpflow123 \
-   JWT_SECRET=tu-clave-secreta-de-al-menos-32-caracteres-helpflow-2026 \
-   ADMIN_EMAIL=admin@helpflow.com \
-   ADMIN_PASSWORD=admin123 \
-   ADMIN_DOCUMENTO=1000000000 \
-   ./mvnw -f support-ticket-service/pom.xml spring-boot:run
-   ```
-
----
-
-## 🗄 Conexión a Base de Datos (DBeaver / DataGrip)
-
-Para conectarte a la base de datos de desarrollo mediante DBeaver, usa los siguientes parámetros:
-
-- **Manejador:** `PostgreSQL`
-- **Host:** `localhost`
-- **Puerto:** `5433` *(mapeado hacia el 5432 interno del contenedor)*
-- **Database:** `helpflow`
-- **Username:** `helpflow`
-- **Password:** `helpflow123` *(o el valor fijado en `DB_PASSWORD` en `.env`)*
-- **URL JDBC:** `jdbc:postgresql://localhost:5433/helpflow`
-
----
-
-## 📡 Catálogo de Endpoints de la API
-
-### 1. Autenticación (`/auth`)
-
-| Método | Endpoint | Acceso | Descripción |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/auth/register` | Público | Registra un nuevo usuario o técnico (`ROLE_USUARIO`, `ROLE_TECNICO`) |
-| `POST` | `/auth/login` | Público | Inicia sesión y retorna token JWT con 60 min de validez |
-
-### 2. Gestión de Tickets (`/tickets`)
-
-| Método | Endpoint | Rol Requerido | Descripción |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/tickets` | `ROLE_USUARIO` | Crea un ticket de soporte. Despacha técnico automáticamente y retorna `201 Created` con encabezado `Location`. |
-| `GET` | `/tickets` | `USUARIO`, `TECNICO`, `ADMIN` | Consulta paginada con filtros (`?page=0&size=10&sort=fechaCreacion&dir=desc&estado=&categoria=&prioridad=`). Cada rol visualiza lo que le compete. |
-| `GET` | `/tickets/{id}` | `USUARIO`, `TECNICO`, `ADMIN` | Consulta detallada del ticket con validación de pertenencia. |
-| `PATCH`| `/tickets/{id}/estado` | `USUARIO`, `TECNICO`, `ADMIN` | Transiciona de estado. **Validación cruzada:** La `observacion` es obligatoria si el estado destino es `RESUELTO` o `CANCELADO`. |
-| `POST` | `/tickets/{id}/observaciones`| `USUARIO`, `TECNICO`, `ADMIN` | Agrega una observación al historial del ticket (solo permitido si el ticket no está cerrado/cancelado). |
-| `PUT`  | `/tickets/{id}/asignacion` | `ROLE_ADMIN` | Asignación o reasignación manual de técnico. |
-
-### 3. Operaciones Administrativas (`/admin`)
-
-| Método | Endpoint | Rol Requerido | Descripción |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/admin/tickets/escalar` | `ROLE_ADMIN` | Ejecuta el proceso de escalamiento de tickets próximos a vencer según SLA. |
-| `GET`  | `/admin/sla` | `ROLE_ADMIN` | Consulta la configuración actual de plazos SLA en horas. |
-| `PUT`  | `/admin/sla` | `ROLE_ADMIN` | Actualiza la matriz de plazos SLA por prioridad (`CRITICA`, `ALTA`, `MEDIA`, `BAJA`). |
-
-### 4. Monitoreo y Diagnóstico (`/actuator`)
-
-| Método | Endpoint | Acceso | Descripción |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/actuator/health` | Público | Estado de salud de la aplicación |
-| `GET` | `/actuator/info` | Público | Información de compilación y versión |
-| `GET` | `/actuator/prometheus` | `ROLE_ADMIN` | Métricas de Micrometer en formato Prometheus |
-
----
-
-## 🔒 Seguridad y Control de Acceso
-
-1. **Tokens JWT Stateless**:
-   - Firmados con algoritmo **HS256** mediante Nimbus Jose JWT.
-   - Duración: 60 minutos.
-   - Contienen `sub` (ID numérico del usuario), `rol` (`ROLE_USUARIO`, `ROLE_TECNICO`, `ROLE_ADMIN`) y `correo`.
-2. **Autorización por Actor**:
-   - En cada petición, `ActorResolver` extrae la identidad del `Jwt` y construye el objeto de valor de dominio `Actor`.
-   - La lógica de acceso fino (ej. un usuario solo puede ver sus propios tickets o cancelar tickets abiertos) es evaluada en los casos de uso, no en la capa web.
-3. **Primer Administrador**:
-   - `AdminBootstrap` crea el primer usuario con rol `ROLE_ADMIN` en el arranque a partir de `ADMIN_EMAIL`, `ADMIN_PASSWORD` y `ADMIN_DOCUMENTO`.
-
----
-
-## 🔍 Observabilidad y Trazabilidad
-
-- **`TraceIdFilter`**:
-  - Filtro servlet con prioridad máxima (`Ordered.HIGHEST_PRECEDENCE`).
-  - Extrae el identificador del header `X-Trace-Id` o genera un UUID versión 4.
-  - Almacena el `traceId` en el **MDC** de SLF4J, permitiendo logs contextualizados.
-  - Añade la cabecera `X-Trace-Id` en la respuesta HTTP y limpia el MDC al finalizar la petición.
-- **Formato RFC 7807 (`ProblemDetail`)**:
-  - Todas las respuestas de error siguen el estándar RFC 7807 incluyendo `type`, `title`, `status`, `detail`, `instance`, `timestamp` y el `traceId` correlacionado.
-
----
-
-## 🧪 Ejecución de Pruebas Automatizadas
-
-La suite de pruebas incluye tests unitarios de dominio y casos de uso, tests de validación cruzada, tests de adaptadores REST con `MockRestServiceServer` y tests de integración con base de datos real mediante **Testcontainers**:
-
-```bash
-# Ejecutar todas las pruebas del microservicio principal
-./mvnw -f support-ticket-service/pom.xml test
-```
-
-Verificación de la pureza de las capas internas:
-
-```bash
-# Comprobar que domain y application no tienen dependencias web/http de Spring
-grep -rn "org\.springframework\.web" support-ticket-service/src/main/java/com/helpflow/supportticket/domain support-ticket-service/src/main/java/com/helpflow/supportticket/application
-grep -rn "org\.springframework\.http" support-ticket-service/src/main/java/com/helpflow/supportticket/domain support-ticket-service/src/main/java/com/helpflow/supportticket/application
-```
-*(Ambos comandos deben finalizar sin ninguna coincidencia)*.
-
+- La edición del perfil de usuarios y técnicos no está implementada.
+- *(Actualizar si el scheduler automático de escalamiento SLA no llegó a completarse: hoy el escalamiento se dispara con `POST /admin/tickets/escalar`.)*
